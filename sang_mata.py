@@ -18,20 +18,15 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
-# Handler untuk /start
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_msg = (
+    msg = (
         "👁️ <b>Sang Mata</b>\n\n"
         "✅ <b>Status: AKTIF</b>\n"
-        "Bot siap memantau perubahan <b>nama</b> dan <b>username</b> Telegram.\n\n"
-        "📝 <i>Catatan:</i>\n"
-        "• Perubahan hanya terdeteksi saat kamu <b>mengirim pesan</b> ke bot.\n"
-        "• Data disimpan sementara (akan reset saat server restart).\n\n"
-        "Kirim pesan apa saja untuk mulai dilacak!"
+        "Bot siap memantau perubahan nama & username.\n\n"
+        "📝 Kirim pesan apa saja untuk mulai dilacak!"
     )
-    await update.message.reply_text(welcome_msg, parse_mode="HTML")
+    await update.message.reply_text(msg, parse_mode="HTML")
 
-# Handler untuk melacak perubahan pengguna
 async def track_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user:
@@ -66,30 +61,41 @@ async def track_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if changes:
         try:
             admin_id = int(os.getenv("ADMIN_TELEGRAM_ID"))
-            msg = (
-                f"👁️ <b>Sang Mata Melihat Perubahan!</b>\n\n"
+            alert = (
+                f"👁️ <b>Sang Mata Melihat!</b>\n\n"
                 f"User: <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
                 + "\n".join(changes)
             )
-            await context.bot.send_message(chat_id=admin_id, text=msg, parse_mode="HTML")
+            await context.bot.send_message(chat_id=admin_id, text=alert, parse_mode="HTML")
             users_db[user_id] = current
             save_data(users_db)
         except Exception as e:
-            print("Error kirim notifikasi:", e)
+            print("Error:", e)
 
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        raise RuntimeError("❌ TELEGRAM_BOT_TOKEN belum diatur di environment!")
-    
+        raise RuntimeError("❌ Token tidak ditemukan!")
+
     app = Application.builder().token(token).build()
-    
-    # Daftarkan handler
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.ALL, track_user))
+
+    # Jalankan sebagai webhook di Render
+    port = int(os.environ.get("PORT", 8000))
+    webhook_url = os.getenv("RENDER_EXTERNAL_URL")
     
-    print("✅ Sang Mata aktif dan siap memantau...")
-    app.run_polling()
+    if webhook_url:
+        # Render otomatis setel RENDER_EXTERNAL_URL
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=token,
+            webhook_url=f"{webhook_url}/{token}"
+        )
+    else:
+        # Untuk testing lokal
+        app.run_polling()
 
 if __name__ == "__main__":
     main()
